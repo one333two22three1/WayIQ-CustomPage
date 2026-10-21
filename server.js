@@ -5,9 +5,6 @@ import crypto from "crypto";
 import path from "path";
 import { fileURLToPath } from "url";
 
-import path from "path";
-import { fileURLToPath } from "url";
-
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 // frame-ancestors checks every ancestor: wayhub.io (the funnel) AND GHL above it

@@ -5,7 +5,8 @@ import crypto from "crypto";
 
 const app = express();
 app.use(express.json());
-const ALLOWED_ORIGINS = ["https://wayhub.io", "https://www.wayhub.io"];
+const ALLOWED_ORIGINS = ["https://wayhub.io", "https://www.wayhub.io", "https://purplescape.com",
+    "https://www.purplescape.com"];
 
 app.use((req, res, next) => {
     const origin = req.headers.origin;

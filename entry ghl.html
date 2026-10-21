@@ -148,9 +148,7 @@
                 details.innerHTML =
                     "<p class='muted'>Token (first 40 characters)</p><pre>" + esc(token) + "…</pre>" +
                     "<p class='muted'>Token claims</p><pre>" + esc(JSON.stringify(claims, null, 2)) + "</pre>" +
-                    "<p class='muted'>WayIQ user</p><pre>" + esc(JSON.stringify(data.user, null, 2)) + "</pre>" +
-                    "<p class='muted'>Opens</p><pre>" + esc(appUrl) + "</pre>" +
-                    "<button id='go'>Continue to WayIQ</button>";
+                    "<p class='muted'>WayIQ user</p><pre>" + esc(JSON.stringify(data.user, null, 2)) + "</pre>";
 
                 document.getElementById("go").onclick = (ev) => {
                     ev.target.disabled = true;

@@ -43,3 +43,6 @@ app.post("/api/auth/exchange", (req, res) => {
         res.json({ session });
     } catch { res.status(401).end(); }
 });
+
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => console.log(`Server running on port ${PORT}`));

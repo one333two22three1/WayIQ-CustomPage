@@ -16,7 +16,9 @@ const JWT_SECRET = process.env.JWT_SECRET;                 // signs the 60-secon
 const SESSION_SECRET = process.env.SESSION_SECRET;         // signs the WayIQ session (different value)
 const ISSUER = "wayhub.io";
 
-for (const [name, value] of Object.entries({ GHL_SHARED_SECRET, JWT_SECRET, SESSION_SECRET })) {
+const WAYIQ_API_KEY = process.env.WAYIQ_API_KEY;
+
+for (const [name, value] of Object.entries({ GHL_SHARED_SECRET, JWT_SECRET, SESSION_SECRET, WAYIQ_API_KEY })) {
     if (!value) {
         console.error(`Missing environment variable: ${name}`);
         process.exit(1);
@@ -92,6 +94,67 @@ function requireSession(req, res, next) {
         res.status(401).json({ error: "Invalid or expired session" });
     }
 }
+
+// ---------- Service-to-service auth for the WayIQ backend ----------
+function requireApiKey(req, res, next) {
+    const given = Buffer.from(String(req.headers["x-api-key"] || ""));
+    const expected = Buffer.from(WAYIQ_API_KEY);
+    if (given.length !== expected.length || !crypto.timingSafeEqual(given, expected)) {
+        return res.status(401).json({ valid: false, code: "UNAUTHORIZED_CLIENT" });
+    }
+    next();
+}
+
+// =====================================================
+// 5) TOKEN VALIDATION for the WayIQ team (server-to-server)
+//    POST /api/token/validate
+//    Headers: X-Api-Key: <WAYIQ_API_KEY>
+//             Authorization: Bearer <login token>
+//    Optional: ?consume=false  -> check only, do not mark the token as used
+// =====================================================
+app.post("/api/token/validate", requireApiKey, (req, res) => {
+    const token = getBearer(req);
+    if (!token) return res.status(400).json({ valid: false, code: "MISSING_TOKEN" });
+
+    try {
+        // Checks signature, issuer, audience and expiry (exp)
+        const p = jwt.verify(token, JWT_SECRET, { issuer: ISSUER, audience: "login" });
+
+        // Single use
+        if (usedJti.has(p.jti)) {
+            return res.status(401).json({ valid: false, code: "TOKEN_ALREADY_USED" });
+        }
+        if (req.query.consume !== "false") {
+            usedJti.set(p.jti, Date.now() + 5 * 60_000);
+        }
+
+        const now = Math.floor(Date.now() / 1000);
+        res.json({
+            valid: true,
+            user: {
+                ghlUserId: p.sub,
+                name: p.name,
+                email: p.email,
+                role: p.role,
+                companyId: p.companyId,
+                locationId: p.locationId,
+            },
+            issuedAt: new Date(p.iat * 1000).toISOString(),
+            expiresAt: new Date(p.exp * 1000).toISOString(),
+            secondsRemaining: Math.max(0, p.exp - now),
+        });
+    } catch (err) {
+        const code =
+            err.name === "TokenExpiredError" ? "TOKEN_EXPIRED" :
+                err.name === "NotBeforeError" ? "TOKEN_NOT_ACTIVE" :
+                    "TOKEN_INVALID";
+        res.status(401).json({
+            valid: false,
+            code,
+            ...(err.name === "TokenExpiredError" && { expiredAt: err.expiredAt }),
+        });
+    }
+});
 
 // =====================================================
 // 1) TOKEN SERVICE

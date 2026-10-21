@@ -17,7 +17,6 @@ const SESSION_SECRET = process.env.SESSION_SECRET;         // signs the WayIQ se
 const ISSUER = "wayhub.io";
 
 const WAYIQ_API_KEY = process.env.WAYIQ_API_KEY;
-
 for (const [name, value] of Object.entries({ GHL_SHARED_SECRET, JWT_SECRET, SESSION_SECRET, WAYIQ_API_KEY })) {
     if (!value) {
         console.error(`Missing environment variable: ${name}`);

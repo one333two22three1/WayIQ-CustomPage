@@ -7,38 +7,13 @@ import { fileURLToPath } from "url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-// frame-ancestors checks every ancestor: wayhub.io (the funnel) AND GHL above it
-const FRAME_ANCESTORS =
-    "frame-ancestors https://wayhub.io https://www.wayhub.io " +
-    "https://app.gohighlevel.com https://*.leadconnectorhq.com https://*.gohighlevel.com";
-
-app.get("/wayiq/ui", (_req, res) => {
-    res.removeHeader("X-Frame-Options");
-    res.setHeader("Content-Security-Policy", FRAME_ANCESTORS);
-    res.setHeader("Cache-Control", "no-store");
-    res.sendFile(path.join(__dirname, "public", "wayiq.html"));
-});
-
-function sendPage(file) {
-    return (_req, res) => {
-        res.removeHeader("X-Frame-Options");
-        res.setHeader("Content-Security-Policy", FRAME_ANCESTORS);
-        res.setHeader("Cache-Control", "no-store");
-        res.sendFile(path.join(__dirname, "public", file));
-    };
-}
-
-app.get("/entry", sendPage("entry.html"));      // verification page
-app.get("/wayiq/ui", sendPage("wayiq.html"));   // the UI page that shows the stored details
-
-const app = express();
+const app = express();            // must come before any app.get / app.post / app.use
 app.use(express.json());
 
 // ---------- Config (Render > Environment) ----------
 const GHL_SHARED_SECRET = process.env.GHL_SHARED_SECRET;   // from the GHL Marketplace app
 const JWT_SECRET = process.env.JWT_SECRET;                 // signs the 60-second login token
 const SESSION_SECRET = process.env.SESSION_SECRET;         // signs the WayIQ session (different value)
-const WAYIQ_APP_URL = process.env.WAYIQ_APP_URL || "https://wayhub.io";   // UI page to open
 const ISSUER = "wayhub.io";
 
 for (const [name, value] of Object.entries({ GHL_SHARED_SECRET, JWT_SECRET, SESSION_SECRET })) {
@@ -48,13 +23,18 @@ for (const [name, value] of Object.entries({ GHL_SHARED_SECRET, JWT_SECRET, SESS
     }
 }
 
-// Origins allowed to call this API
+// Origins allowed to call this API (the funnel page on wayhub.io)
 const ALLOWED_ORIGINS = [
     "https://wayhub.io",
     "https://www.wayhub.io",
     "https://purplescape.com",
     "https://www.purplescape.com",
 ];
+
+// frame-ancestors checks every ancestor: the funnel (wayhub.io) AND GHL above it
+const FRAME_ANCESTORS =
+    "frame-ancestors https://wayhub.io https://www.wayhub.io " +
+    "https://app.gohighlevel.com https://*.leadconnectorhq.com https://*.gohighlevel.com";
 
 // ---------- CORS ----------
 app.use((req, res, next) => {
@@ -111,8 +91,8 @@ function requireSession(req, res, next) {
 
 // =====================================================
 // 1) TOKEN SERVICE
-//    Decrypts the GHL payload and issues a 60-second login token
 //    POST /api/ghl/sso
+//    Decrypts the GHL payload and issues a 60-second login token
 // =====================================================
 app.post("/api/ghl/sso", (req, res) => {
     try {
@@ -150,10 +130,9 @@ app.post("/api/ghl/sso", (req, res) => {
 
 // =====================================================
 // 2) WAYIQ LOGIN
-//    Receives the token in the Authorization header, validates it,
-//    returns a WayIQ session and the UI page to open (wayhub.io)
 //    POST /wayiq/auth/ghl-login
 //    Header: Authorization: Bearer <login token>
+//    Validates the token, returns the verified user (and a session)
 // =====================================================
 app.post("/wayiq/auth/ghl-login", (req, res) => {
     const token = getBearer(req);
@@ -181,7 +160,6 @@ app.post("/wayiq/auth/ghl-login", (req, res) => {
 
         res.json({
             session,
-            appUrl: WAYIQ_APP_URL,            // the UI page the entry page should open
             user: {
                 id: user.id,
                 name: user.name,
@@ -202,7 +180,6 @@ app.post("/wayiq/auth/ghl-login", (req, res) => {
 
 // =====================================================
 // 3) WAYIQ API (protected by the session header)
-//    The wayhub.io page calls these with Authorization: Bearer <session>
 // =====================================================
 app.get("/wayiq/api/me", requireSession, (req, res) => {
     const { id, name, email, role, locationId } = req.user;
@@ -211,6 +188,17 @@ app.get("/wayiq/api/me", requireSession, (req, res) => {
 
 // Add more WayIQ endpoints here, for example:
 // app.get("/wayiq/api/reports", requireSession, (req, res) => { ... });
+
+// =====================================================
+// 4) WAYIQ UI PAGE (shown inside the funnel's frame)
+//    GET /wayiq/ui  ->  public/wayiq.html
+// =====================================================
+app.get("/wayiq/ui", (_req, res) => {
+    res.removeHeader("X-Frame-Options");
+    res.setHeader("Content-Security-Policy", FRAME_ANCESTORS);
+    res.setHeader("Cache-Control", "no-store");
+    res.sendFile(path.join(__dirname, "public", "wayiq.html"));
+});
 
 app.get("/", (_req, res) => res.send("Token service + WayIQ API running"));
 

@@ -109,7 +109,8 @@ function requireApiKey(req, res, next) {
 //    POST /api/token/validate
 //    Headers: X-Api-Key: <WAYIQ_API_KEY>
 //             Authorization: Bearer <login token>
-//    Optional: ?consume=false  -> check only, do not mark the token as used
+//    Check-only: verifies signature/expiry but does NOT consume the token.
+//    Token is consumed exclusively by /wayiq/auth/ghl-login.
 // =====================================================
 app.post("/api/token/validate", requireApiKey, (req, res) => {
     const token = getBearer(req);
@@ -118,14 +119,6 @@ app.post("/api/token/validate", requireApiKey, (req, res) => {
     try {
         // Checks signature, issuer, audience and expiry (exp)
         const p = jwt.verify(token, JWT_SECRET, { issuer: ISSUER, audience: "login" });
-
-        // Single use
-        if (usedJti.has(p.jti)) {
-            return res.status(401).json({ valid: false, code: "TOKEN_ALREADY_USED" });
-        }
-        if (req.query.consume !== "false") {
-            usedJti.set(p.jti, Date.now() + 5 * 60_000);
-        }
 
         const now = Math.floor(Date.now() / 1000);
         res.json({
@@ -207,7 +200,8 @@ app.post("/wayiq/auth/ghl-login", (req, res) => {
     try {
         const p = jwt.verify(token, JWT_SECRET, { issuer: ISSUER, audience: "login" });
 
-        if (usedJti.has(p.jti)) return res.status(401).json({ error: "Token already used" });
+        // Single-use enforcement — token is consumed here and only here
+        if (usedJti.has(p.jti)) return res.status(401).json({ error: "Token already used", code: "TOKEN_ALREADY_USED" });
         usedJti.set(p.jti, Date.now() + 5 * 60_000);
 
         const user = findOrCreateUser({

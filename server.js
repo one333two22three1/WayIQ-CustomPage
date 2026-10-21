@@ -93,6 +93,7 @@ app.post("/api/ghl/sso", (req, res) => {
 // =====================================================
 app.post("/wayiq/auth/ghl-login", (req, res) => {
     const token = getBearer(req);
+    console.log("ghl-login: has Authorization header?", !!req.headers.authorization);
     if (!token) return res.status(401).json({ error: "Missing token" });
 
     try {
@@ -115,13 +116,15 @@ app.post("/wayiq/auth/ghl-login", (req, res) => {
             session,
             user: { id: user.id, name: user.name, email: user.email, role: user.role, locationId: user.locationId },
         });
-    } catch {
-        res.status(401).json({ error: "Invalid or expired token" });
+    } catch (err) {
+        console.error("ghl-login failed:", err.name, err.message);
+        res.status(401).json({ error: "Invalid or expired token", reason: err.message });
     }
 });
 
 function requireSession(req, res, next) {
     const token = getBearer(req);
+    console.log("ghl-login: has Authorization header?", !!req.headers.authorization);
     if (!token) return res.status(401).json({ error: "Missing session" });
     try {
         const p = jwt.verify(token, SESSION_SECRET, { issuer: "wayiq", audience: "wayiq-session" });

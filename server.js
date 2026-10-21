@@ -5,6 +5,20 @@ import crypto from "crypto";
 
 const app = express();
 app.use(express.json());
+const ALLOWED_ORIGINS = ["https://wayhub.io", "https://www.wayhub.io"];
+
+app.use((req, res, next) => {
+    const origin = req.headers.origin;
+    if (ALLOWED_ORIGINS.includes(origin)) {
+        res.setHeader("Access-Control-Allow-Origin", origin);
+        res.setHeader("Vary", "Origin");
+    }
+    res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+    res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
+    if (req.method === "OPTIONS") return res.sendStatus(204);
+    next();
+});
+
 const usedJti = new Set();   // use Redis with TTL in production
 
 app.post("/api/ghl/sso", (req, res) => {

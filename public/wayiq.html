@@ -1,0 +1,135 @@
+<!doctype html>
+<html>
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>WayIQ</title>
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            font-family: system-ui, sans-serif;
+            color: #1f2430;
+            background: #f5f6fa;
+        }
+
+        header {
+            background: #1f2a44;
+            color: #fff;
+            padding: 14px 24px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        header .logo {
+            font-weight: 600;
+            font-size: 18px;
+        }
+
+        header .who {
+            font-size: 13px;
+            opacity: .85;
+        }
+
+        main {
+            max-width: 640px;
+            margin: 24px auto;
+            padding: 0 16px;
+        }
+
+        .card {
+            background: #fff;
+            border: 1px solid #e3e6ee;
+            border-radius: 12px;
+            padding: 20px;
+        }
+
+        h2 {
+            margin: 0 0 14px;
+            font-size: 18px;
+        }
+
+        dl {
+            display: grid;
+            grid-template-columns: 130px 1fr;
+            gap: 8px 12px;
+            margin: 0;
+        }
+
+        dt {
+            color: #7a8196;
+        }
+
+        dd {
+            margin: 0;
+            word-break: break-all;
+        }
+
+        .empty {
+            text-align: center;
+            color: #666;
+        }
+    </style>
+</head>
+
+<body>
+    <header>
+        <div class="logo">WayIQ</div>
+        <div class="who" id="who"></div>
+    </header>
+    <main>
+        <div class="card empty" id="card">
+            <p>Loading your details…</p>
+        </div>
+    </main>
+
+    <script>
+        // Only accept details from the wayhub.io page that framed us
+        const ALLOWED_PARENTS = ["https://wayhub.io", "https://www.wayhub.io"];
+        const card = document.getElementById("card");
+
+        const esc = (s) => String(s ?? "-").replace(/[&<>"']/g, (c) =>
+            ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+
+        function render(u) {
+            if (!u || !u.email) {
+                card.className = "card empty";
+                card.innerHTML = "<p>No verified details found. Please open WayIQ from GHL.</p>";
+                return;
+            }
+            document.getElementById("who").textContent = (u.name || "") + " · " + (u.email || "");
+            card.className = "card";
+            card.innerHTML = `
+      <h2>Welcome, ${esc(u.name)}</h2>
+      <dl>
+        <dt>Name</dt><dd>${esc(u.name)}</dd>
+        <dt>Email</dt><dd>${esc(u.email)}</dd>
+        <dt>Role</dt><dd>${esc(u.role)}</dd>
+        <dt>GHL account</dt><dd>${esc(u.locationId)}</dd>
+        <dt>WayIQ user ID</dt><dd>${esc(u.id)}</dd>
+        <dt>Verified at</dt><dd>${esc(u.verifiedAt ? new Date(u.verifiedAt).toLocaleString() : "-")}</dd>
+      </dl>`;
+        }
+
+        window.addEventListener("message", (e) => {
+            if (e.source !== window.parent) return;
+            if (!ALLOWED_PARENTS.includes(e.origin)) return;
+            if (e.data?.type !== "WAYIQ_USER") return;
+            render(e.data.user);
+        });
+
+        // Tell the parent we are ready to receive
+        if (window.parent === window) {
+            render(null);
+        } else {
+            window.parent.postMessage({ type: "WAYIQ_UI_READY" }, "*");
+        }
+    </script>
+</body>
+
+</html>

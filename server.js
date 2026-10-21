@@ -2,6 +2,37 @@ import express from "express";
 import CryptoJS from "crypto-js";
 import jwt from "jsonwebtoken";
 import crypto from "crypto";
+import path from "path";
+import { fileURLToPath } from "url";
+
+import path from "path";
+import { fileURLToPath } from "url";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
+// frame-ancestors checks every ancestor: wayhub.io (the funnel) AND GHL above it
+const FRAME_ANCESTORS =
+    "frame-ancestors https://wayhub.io https://www.wayhub.io " +
+    "https://app.gohighlevel.com https://*.leadconnectorhq.com https://*.gohighlevel.com";
+
+app.get("/wayiq/ui", (_req, res) => {
+    res.removeHeader("X-Frame-Options");
+    res.setHeader("Content-Security-Policy", FRAME_ANCESTORS);
+    res.setHeader("Cache-Control", "no-store");
+    res.sendFile(path.join(__dirname, "public", "wayiq.html"));
+});
+
+function sendPage(file) {
+    return (_req, res) => {
+        res.removeHeader("X-Frame-Options");
+        res.setHeader("Content-Security-Policy", FRAME_ANCESTORS);
+        res.setHeader("Cache-Control", "no-store");
+        res.sendFile(path.join(__dirname, "public", file));
+    };
+}
+
+app.get("/entry", sendPage("entry.html"));      // verification page
+app.get("/wayiq/ui", sendPage("wayiq.html"));   // the UI page that shows the stored details
 
 const app = express();
 app.use(express.json());

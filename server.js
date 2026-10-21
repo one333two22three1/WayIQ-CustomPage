@@ -177,7 +177,7 @@ app.post("/api/ghl/sso", (req, res) => {
                 jti: crypto.randomUUID(),
             },
             JWT_SECRET,
-            { expiresIn: "60s", issuer: ISSUER, audience: "login" }
+            { expiresIn: "60m", issuer: ISSUER, audience: "login" }
         );
 
         res.json({ token });

@@ -33,8 +33,12 @@ const ALLOWED_ORIGINS = [
 
 // frame-ancestors checks every ancestor: the funnel (wayhub.io) AND GHL above it
 const FRAME_ANCESTORS =
-    "frame-ancestors https://wayhub.io https://www.wayhub.io " +
-    "https://app.gohighlevel.com https://*.leadconnectorhq.com https://*.gohighlevel.com";
+    "frame-ancestors " +
+    "https://wayhub.io https://*.wayhub.io " +
+    "https://app.gohighlevel.com https://*.gohighlevel.com " +
+    "https://*.leadconnectorhq.com https://*.msgsndr.com " +
+    "https://*.myfunnels.com https://*.leadconnectorhq.com " +
+    (process.env.EXTRA_FRAME_ANCESTORS || "");
 
 // ---------- CORS ----------
 app.use((req, res, next) => {
@@ -197,6 +201,7 @@ app.get("/wayiq/ui", (_req, res) => {
     res.removeHeader("X-Frame-Options");
     res.setHeader("Content-Security-Policy", FRAME_ANCESTORS);
     res.setHeader("Cache-Control", "no-store");
+    res.setHeader("Content-Security-Policy", "frame-ancestors *");
     res.sendFile(path.join(__dirname, "public", "wayiq.html"));
 });
 

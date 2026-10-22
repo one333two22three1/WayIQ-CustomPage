@@ -55,12 +55,7 @@ app.use((req, res, next) => {
 });
 
 // ---------- Helpers ----------
-// Single-use login tokens (use Redis in production, this resets on restart)
-const usedJti = new Map();
-setInterval(() => {
-    const now = Date.now();
-    for (const [id, exp] of usedJti) if (exp < now) usedJti.delete(id);
-}, 60_000);
+
 
 // Test user store (use a database in production)
 const users = new Map();
@@ -199,10 +194,6 @@ app.post("/wayiq/auth/ghl-login", (req, res) => {
 
     try {
         const p = jwt.verify(token, JWT_SECRET, { issuer: ISSUER, audience: "login" });
-
-        // Single-use enforcement — token is consumed here and only here
-        if (usedJti.has(p.jti)) return res.status(401).json({ error: "Token already used", code: "TOKEN_ALREADY_USED" });
-        usedJti.set(p.jti, Date.now() + 5 * 60_000);
 
         const user = findOrCreateUser({
             ghlUserId: p.sub,

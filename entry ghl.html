@@ -6,23 +6,43 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>WayIQ sign-in</title>
     <style>
+        * {
+            box-sizing: border-box;
+        }
+
         body {
-            font-family: system-ui, sans-serif;
+            font-family: system-ui, -apple-system, sans-serif;
             margin: 0;
+            min-height: 100vh;
+            background: #f0f2f5;
+            display: flex;
+            align-items: center;
+            justify-content: center;
             padding: 24px;
             color: #222;
         }
 
         .card {
-            max-width: 640px;
-            margin: 0 auto;
-            border: 1px solid #ddd;
+            width: 100%;
+            max-width: 620px;
+            background: #fff;
+            border: 1px solid #d9dde8;
             border-radius: 12px;
-            padding: 20px;
+            padding: 28px 28px 24px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.07);
+        }
+
+        .card h3 {
+            margin: 0 0 16px;
+            font-size: 17px;
+            font-weight: 600;
+            line-height: 1.4;
         }
 
         .muted {
             color: #777;
+            font-size: 13px;
+            margin: 12px 0 4px;
         }
 
         .err {
@@ -35,11 +55,14 @@
 
         pre {
             background: #f4f5f8;
+            border: 1px solid #e4e6ed;
             border-radius: 8px;
-            padding: 12px;
+            padding: 12px 14px;
             white-space: pre-wrap;
             word-break: break-all;
             font-size: 12px;
+            margin: 0 0 8px;
+            line-height: 1.6;
         }
 
         button {
@@ -47,9 +70,15 @@
             color: #fff;
             border: 0;
             border-radius: 8px;
-            padding: 10px 18px;
+            padding: 10px 20px;
             cursor: pointer;
             font-size: 15px;
+            font-weight: 500;
+            margin-top: 8px;
+        }
+
+        button:hover {
+            background: #1a46e0;
         }
 
         button:disabled {
@@ -115,7 +144,7 @@
             handled = true;
 
             try {
-                statusEl.textContent = "1) GHL data received (" + String(e.data.payload).length + " chars)";
+                statusEl.textContent = "GHL data received";
 
                 // Token service: GHL payload -> 60-second token
                 const t = await fetch(TOKEN_API + "/api/ghl/sso", {
@@ -146,16 +175,15 @@
                 statusEl.className = "ok";
                 statusEl.textContent = "Verified. Review the details, then continue.";
                 details.innerHTML =
-                    "<p class='muted'>Token (first 40 characters)</p><pre>" + esc(token) + "</pre>" +
-                    "<p class='muted'>Token claims</p><pre>" + esc(JSON.stringify(claims, null, 2)) + "</pre>" +
-                    "<p class='muted'>WayIQ user</p><pre>" + esc(JSON.stringify(data.user, null, 2)) + "</pre>" +
-                    "<p class='muted'>Opens</p><pre>" + esc(appUrl) + "</pre>" +
-                    "<button id='go'>Continue to WayIQ</button>";
+                    "<p class='muted'>Token</p><pre>" + esc(token) + "</pre>" +
+                    "<p class='muted'>Token claims</p><pre>" + esc(JSON.stringify(claims, null, 2)) + "</pre>";
+                // "<p class='muted'>Opens</p><pre>" + esc(appUrl) + "</pre>" +
+                // "<button id='go'>Continue to WayIQ</button>";
 
-                document.getElementById("go").onclick = (ev) => {
-                    ev.target.disabled = true;
-                    openWayIQ();
-                };
+                // document.getElementById("go").onclick = (ev) => {
+                //     ev.target.disabled = true;
+                //     openWayIQ();
+                // };
             } catch (err) {
                 console.error(err);
                 fail("Something went wrong: " + err.message);

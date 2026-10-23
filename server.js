@@ -99,7 +99,32 @@ function requireApiKey(req, res, next) {
     next();
 }
 
-const WAYIQ_AUTH_URL = "https://api-wayiq.dev.purplescape.com/api/v1/purpl-home/auth/ghl";
+const WAYIQ_AUTH_URL = "https://api-wayiq.dev.purplescape.com/api/purpl-home/auth/ghl";
+
+app.post("/api/wayiq/auth", async (req, res) => {
+    const accessToken = req.body?.accessToken;
+    if (!accessToken) return res.status(400).json({ error: "Missing accessToken" });
+
+    try {
+        // Only forward tokens that this service issued
+        jwt.verify(accessToken, JWT_SECRET, { issuer: ISSUER, audience: "login" });
+    } catch {
+        return res.status(401).json({ error: "Invalid or expired token" });
+    }
+
+    try {
+        const r = await fetch(WAYIQ_AUTH_URL, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ accessToken }),
+        });
+        const body = await r.json().catch(() => ({}));
+        res.status(r.status).json(body);
+    } catch (err) {
+        console.error("WayIQ call failed:", err.message);
+        res.status(502).json({ error: "WayIQ unreachable", reason: err.message });
+    }
+});
 
 app.post("/api/wayiq/auth", async (req, res) => {
     const accessToken = req.body?.accessToken;

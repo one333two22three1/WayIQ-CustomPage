@@ -20,7 +20,9 @@ const app = express();            // must come before any app.get / app.post / a
 app.use(express.json());
 
 // ---------- Config (Render > Environment) ----------
-const GHL_SHARED_SECRET = process.env.GHL_SHARED_SECRET;   // from the GHL Marketplace app
+const GHL_SHARED_SECRET = process.env.GHL_SHARED_SECRET;   // from the GHL Marketplace app(s), comma-separated
+// Each marketplace app that opens this page encrypts with its own shared secret
+const GHL_SHARED_SECRETS = (GHL_SHARED_SECRET || "").split(",").map((s) => s.trim()).filter(Boolean);
 const JWT_SECRET = process.env.JWT_SECRET;                 // signs the 60-second login token
 const SESSION_SECRET = process.env.SESSION_SECRET;         // signs the WayIQ session (different value)
 const ISSUER = "wayhub.io";
@@ -78,6 +80,19 @@ function findOrCreateUser({ ghlUserId, email, name, role, locationId }) {
         Object.assign(u, { email, name, role, locationId });
     }
     return u;
+}
+
+// Decrypts the GHL SSO payload with whichever app's shared secret it was encrypted with
+function decryptSsoPayload(encrypted) {
+    for (const secret of GHL_SHARED_SECRETS) {
+        try {
+            const user = JSON.parse(CryptoJS.AES.decrypt(encrypted, secret).toString(CryptoJS.enc.Utf8));
+            if (user?.userId) return user;
+        } catch {
+            // encrypted by another app: try the next secret
+        }
+    }
+    throw new Error("no configured shared secret matches the payload");
 }
 
 function getBearer(req) {
@@ -230,9 +245,7 @@ app.post("/api/token/validate", requireApiKey, (req, res) => {
 // =====================================================
 app.post("/api/ghl/sso", (req, res) => {
     try {
-        const bytes = CryptoJS.AES.decrypt(req.body.encrypted, GHL_SHARED_SECRET);
-        const user = JSON.parse(bytes.toString(CryptoJS.enc.Utf8));
-        if (!user.userId) throw new Error("bad payload");
+        const user = decryptSsoPayload(req.body?.encrypted);
 
         console.log("GHL user:", {
             userId: user.userId,

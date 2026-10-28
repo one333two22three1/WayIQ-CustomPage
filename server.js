@@ -4,6 +4,15 @@ import jwt from "jsonwebtoken";
 import crypto from "crypto";
 import path from "path";
 import { fileURLToPath } from "url";
+import {
+    HttpError,
+    getInstallUrl,
+    initOAuth,
+    getLocationToken,
+    ghlRequest,
+    handleInstallCallback,
+    handleWebhook,
+} from "./ghl-oauth.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -23,6 +32,7 @@ for (const [name, value] of Object.entries({ GHL_SHARED_SECRET, JWT_SECRET, SESS
         process.exit(1);
     }
 }
+await initOAuth();   // OAuth is optional at startup: logs what is missing, creates the token table
 
 // Origins allowed to call this API (the funnel page on wayhub.io)
 const ALLOWED_ORIGINS = [
@@ -87,6 +97,24 @@ function requireSession(req, res, next) {
     } catch {
         res.status(401).json({ error: "Invalid or expired session" });
     }
+}
+
+// Verifies the login token (issued by /api/ghl/sso) and keeps its user and location on req.login
+function requireLoginToken(req, res, next) {
+    const token = getBearer(req);
+    if (!token) return res.status(401).json({ error: "Missing token" });
+    try {
+        req.login = jwt.verify(token, JWT_SECRET, { issuer: ISSUER, audience: "login" });
+        next();
+    } catch {
+        res.status(401).json({ error: "Invalid or expired token" });
+    }
+}
+
+function sendError(res, err) {
+    if (err instanceof HttpError) return res.status(err.status).json(err.body);
+    console.error("Unexpected error:", err);
+    res.status(500).json({ error: "Server error" });
 }
 
 // ---------- Service-to-service auth for the WayIQ backend ----------
@@ -291,6 +319,67 @@ app.get("/wayiq/api/me", requireSession, (req, res) => {
 
 // Add more WayIQ endpoints here, for example:
 // app.get("/wayiq/api/reports", requireSession, (req, res) => { ... });
+
+// =====================================================
+// 6) GHL MARKETPLACE OAUTH (see ghl-oauth.js)
+//    One agency install gives tokens for every sub-account
+// =====================================================
+app.get("/oauth/install", (_req, res) => {
+    try {
+        res.redirect(getInstallUrl());
+    } catch (err) {
+        sendError(res, err);
+    }
+});
+
+app.get("/oauth/callback", async (req, res) => {
+    try {
+        res.json({ installed: true, ...(await handleInstallCallback(req.query.code)) });
+    } catch (err) {
+        sendError(res, err);
+    }
+});
+
+app.post("/oauth/webhook", async (req, res) => {
+    try {
+        res.json(await handleWebhook(req.query.key, req.body));
+    } catch (err) {
+        sendError(res, err);
+    }
+});
+
+// =====================================================
+// 7) GHL TASK API (test endpoints for the OAuth location token)
+//    Header: Authorization: Bearer <login token>
+//    The location and user come from the login token, never from the request.
+// =====================================================
+
+// GET /api/ghl/tasks?contactId=...  -> the contact's tasks
+app.get("/api/ghl/tasks", requireLoginToken, async (req, res) => {
+    const { contactId } = req.query;
+    if (!contactId) return res.status(400).json({ error: "Missing contactId" });
+    try {
+        const accessToken = await getLocationToken(req.login.companyId, req.login.locationId);
+        res.json(await ghlRequest(accessToken, "GET", `/contacts/${encodeURIComponent(contactId)}/tasks`));
+    } catch (err) {
+        sendError(res, err);
+    }
+});
+
+// POST /api/ghl/tasks  { contactId, title, body?, dueDate, completed? }  -> creates a task assigned to the signed-in user
+app.post("/api/ghl/tasks", requireLoginToken, async (req, res) => {
+    const { contactId, title, body, dueDate, completed = false } = req.body ?? {};
+    if (!contactId || !title || !dueDate) {
+        return res.status(400).json({ error: "contactId, title and dueDate are required" });
+    }
+    try {
+        const accessToken = await getLocationToken(req.login.companyId, req.login.locationId);
+        const task = { title, body, dueDate, completed, assignedTo: req.login.sub };
+        res.json(await ghlRequest(accessToken, "POST", `/contacts/${encodeURIComponent(contactId)}/tasks`, task));
+    } catch (err) {
+        sendError(res, err);
+    }
+});
 
 // =====================================================
 // 4) WAYIQ UI PAGE (shown inside the funnel's frame)

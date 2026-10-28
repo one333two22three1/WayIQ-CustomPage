@@ -4,193 +4,190 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>WayIQ sign-in</title>
+    <title>WayIQ</title>
     <style>
         * {
             box-sizing: border-box;
         }
 
+        html,
         body {
-            font-family: system-ui, -apple-system, sans-serif;
+            height: 100%;
+        }
+
+        body {
             margin: 0;
-            min-height: 100vh;
-            background: #f0f2f5;
+            background: #fff;
+            font-family: system-ui, -apple-system, sans-serif;
+        }
+
+        /* ---------- Loader ---------- */
+        /* ---------- Loader (sized to match the WayIQ page loader) ---------- */
+        :root {
+            --spinner-size: 60px;
+            /* was 44px */
+            --spinner-thickness: 4px;
+            /* was 3px */
+            --loader-font: 17px;
+            /* was 15px */
+            --loader-gap: 24px;
+            /* was 18px */
+        }
+
+        #loader {
+            position: fixed;
+            inset: 0;
             display: flex;
+            flex-direction: column;
             align-items: center;
             justify-content: center;
-            padding: 24px;
-            color: #222;
-        }
-
-        .card {
-            width: 100%;
-            max-width: 620px;
+            gap: var(--loader-gap);
             background: #fff;
-            border: 1px solid #d9dde8;
-            border-radius: 12px;
-            padding: 28px 28px 24px;
-            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.07);
         }
 
-        .card h3 {
-            margin: 0 0 16px;
-            font-size: 17px;
-            font-weight: 600;
-            line-height: 1.4;
+        .spinner {
+            width: var(--spinner-size);
+            height: var(--spinner-size);
+            border: var(--spinner-thickness) solid transparent;
+            border-top-color: #b565b0;
+            border-left-color: #b565b0;
+            border-radius: 50%;
+            animation: wqspin 0.9s linear infinite;
         }
 
-        .muted {
-            color: #777;
-            font-size: 13px;
-            margin: 12px 0 4px;
+        .loader-text {
+            color: #9a9aa5;
+            font-size: var(--loader-font);
         }
 
-        .err {
+        @keyframes wqspin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+
+        /* ---------- Error ---------- */
+        #loader.err .spinner {
+            display: none;
+        }
+
+        #loader.err .loader-text {
             color: #b00020;
-        }
-
-        .ok {
-            color: #1b7f3b;
-        }
-
-        pre {
-            background: #f4f5f8;
-            border: 1px solid #e4e6ed;
-            border-radius: 8px;
-            padding: 12px 14px;
-            white-space: pre-wrap;
-            word-break: break-all;
-            font-size: 12px;
-            margin: 0 0 8px;
-            line-height: 1.6;
-        }
-
-        button {
-            background: #2d5bff;
-            color: #fff;
-            border: 0;
-            border-radius: 8px;
-            padding: 10px 20px;
-            cursor: pointer;
-            font-size: 15px;
-            font-weight: 500;
-            margin-top: 8px;
-        }
-
-        button:hover {
-            background: #1a46e0;
-        }
-
-        button:disabled {
-            opacity: .6;
-            cursor: default;
         }
     </style>
 </head>
 
 <body>
-    <div class="card" id="box">
-        <h3 id="status">Waiting for GHL…</h3>
-        <div id="details"></div>
+    <div id="loader">
+        <div class="spinner"></div>
+        <div class="loader-text" id="loaderText">Hold tight. Good data takes time.</div>
     </div>
 
     <script>
-        const TOKEN_API = "https://wayiq-custompage.onrender.com";
-        const WAYIQ_API = "https://wayiq-custompage.onrender.com/wayiq";
-        const DEFAULT_APP_URL = "https://wayhub.io";   // used if the server doesn't return appUrl
-        const REQUIRE_CONTINUE = true;                 // true = verification screen + Continue; false = open straight away
+        (() => {
+            if (window.__wqLoaded) return;          // ignore duplicate copies of this script
+            window.__wqLoaded = true;
 
-        const statusEl = document.getElementById("status");
-        const details = document.getElementById("details");
+            const TOKEN_API = "https://wayiq-custompage.onrender.com/api/ghl/sso";
 
-        let session = null;
-        let appUrl = DEFAULT_APP_URL;                  // <- this was missing; it is set from the login response below
-        let handled = false;
+            // Use ONE of these two:
+            const WAYIQ_API = "https://wayiq-custompage.onrender.com/api/wayiq/auth";              // via Render (no CORS problem)
+            // const WAYIQ_API = "https://api-wayiq.dev.purplescape.com/api/purpl-home/auth/ghl";  // direct (needs CORS on WayIQ)
 
-        function esc(s) {
-            return String(s ?? "-").replace(/[&<>"']/g, (c) =>
-                ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
-        }
+            const ALLOWED_REDIRECT_HOSTS = ["wayiq.dev.purplescape.com"];
 
-        function decodeJwt(t) {
-            const p = t.split(".")[1].replace(/-/g, "+").replace(/_/g, "/");
-            return JSON.parse(decodeURIComponent(escape(atob(p))));
-        }
+            const loader = document.getElementById("loader");
+            const loaderText = document.getElementById("loaderText");
+            let handled = false;
 
-        function fail(text) {
-            statusEl.className = "err";
-            statusEl.textContent = text;
-        }
+            function fail(text) {
+                loader.classList.add("err");
+                loaderText.textContent = text;
+            }
 
-        // Open the wayhub.io page in an inner frame and hand it the session (postMessage, never in the URL)
-        function openWayIQ() {
-            const origin = new URL(appUrl).origin;
+            function findUrl(j) {
+                const c = [j?.redirectUrl, j?.url, j?.pageUrl, j?.data?.redirectUrl, j?.data?.url];
+                return c.find((v) => typeof v === "string" && /^https?:\/\//.test(v));
+            }
 
-            window.addEventListener("message", (e) => {
-                if (e.origin !== origin || e.data?.type !== "WAYIQ_READY") return;
-                e.source.postMessage({ type: "WAYIQ_SESSION", session }, origin);
+            // Load the page in a full-size frame; keep the loader visible until it has loaded
+            function openFrame(url) {
+                const frame = document.createElement("iframe");
+                frame.src = url;
+                frame.style.cssText =
+                    "position:fixed;inset:0;width:100%;height:100%;border:0;background:#fff;opacity:0";
+                frame.setAttribute("allow", "clipboard-write");
+
+                let shown = false;
+                const reveal = () => {
+                    if (shown) return;
+                    shown = true;
+                    frame.style.opacity = "1";
+                    loader.remove();
+                };
+                frame.addEventListener("load", reveal);
+                setTimeout(reveal, 15000);          // safety: never keep the loader forever
+
+                document.body.appendChild(frame);
+            }
+
+            async function post(url, body) {
+                const ctrl = new AbortController();
+                const timer = setTimeout(() => ctrl.abort(), 30000);
+                try {
+                    return await fetch(url, {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify(body),
+                        signal: ctrl.signal,
+                    });
+                } finally {
+                    clearTimeout(timer);
+                }
+            }
+
+            window.addEventListener("message", async (e) => {
+                if (e.source !== window.parent) return;
+                if (e.data?.message !== "REQUEST_USER_DATA_RESPONSE") return;
+                if (handled) return;
+                handled = true;
+                clearTimeout(waitTimer);
+
+                try {
+                    // 1) GHL payload -> token (Render)
+                    const t = await post(TOKEN_API, { encrypted: e.data.payload });
+                    if (!t.ok) return fail("Token service error " + t.status);
+                    const { token } = await t.json();
+
+                    // 2) Send the token as accessToken
+                    const r = await post(WAYIQ_API, { accessToken: token });
+                    if (!r.ok) return fail("WayIQ rejected the sign-in (" + r.status + ")");
+                    const data = await r.json();
+
+                    const url = findUrl(data);
+                    if (!url) return fail("WayIQ did not return a page to open.");
+
+                    // 3) Open the response page directly
+                    const target = new URL(url);
+                    if (target.protocol !== "https:" || !ALLOWED_REDIRECT_HOSTS.includes(target.hostname)) {
+                        return fail("Unexpected redirect address.");
+                    }
+                    openFrame(target.toString());
+                } catch (err) {
+                    console.error(err);
+                    fail(err.name === "AbortError"
+                        ? "The request timed out. Please reload."
+                        : "Something went wrong: " + err.message);
+                }
             });
 
-            const frame = document.createElement("iframe");
-            frame.src = appUrl;
-            frame.style.cssText = "position:fixed;inset:0;width:100%;height:100%;border:0";
-            document.body.replaceChildren(frame);
-        }
+            // If GHL never answers, say so instead of spinning forever
+            const waitTimer = setTimeout(() => {
+                if (!handled) fail("No response from GHL. Open this page from the WayIQ sidebar icon.");
+            }, 15000);
 
-        window.addEventListener("message", async (e) => {
-            if (e.source !== window.parent) return;
-            if (e.data?.message !== "REQUEST_USER_DATA_RESPONSE") return;
-            if (handled) return;
-            handled = true;
-
-            try {
-                statusEl.textContent = "GHL data received";
-
-                // Token service: GHL payload -> 60-second token
-                const t = await fetch(TOKEN_API + "/api/ghl/sso", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ encrypted: e.data.payload }),
-                });
-                if (!t.ok) return fail("Token service error " + t.status);
-                const { token } = await t.json();
-                const claims = decodeJwt(token);
-
-                // WayIQ: token in the Authorization header -> session + page to open
-                const r = await fetch(WAYIQ_API + "/auth/ghl-login", {
-                    method: "POST",
-                    headers: { Authorization: "Bearer " + token },
-                });
-                if (!r.ok) {
-                    let detail = "";
-                    try { const b = await r.json(); detail = " - " + (b.reason || b.error); } catch (_) { }
-                    return fail("WayIQ rejected the sign-in (" + r.status + ")" + detail);
-                }
-                const data = await r.json();
-                session = data.session;
-                appUrl = data.appUrl || DEFAULT_APP_URL;   // <- set here
-
-                if (!REQUIRE_CONTINUE) return openWayIQ();
-
-                statusEl.className = "ok";
-                statusEl.textContent = "Verified. Review the details, then continue.";
-                details.innerHTML =
-                    "<p class='muted'>Token</p><pre>" + esc(token) + "</pre>" +
-                    "<p class='muted'>Token claims</p><pre>" + esc(JSON.stringify(claims, null, 2)) + "</pre>";
-                // "<p class='muted'>Opens</p><pre>" + esc(appUrl) + "</pre>" +
-                // "<button id='go'>Continue to WayIQ</button>";
-
-                // document.getElementById("go").onclick = (ev) => {
-                //     ev.target.disabled = true;
-                //     openWayIQ();
-                // };
-            } catch (err) {
-                console.error(err);
-                fail("Something went wrong: " + err.message);
-            }
-        });
-
-        window.parent.postMessage({ message: "REQUEST_USER_DATA" }, "*");
+            window.parent.postMessage({ message: "REQUEST_USER_DATA" }, "*");
+        })();
     </script>
 </body>
 
